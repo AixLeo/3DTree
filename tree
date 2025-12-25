@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Christmas Tree</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap');
+
+        body { margin: 0; overflow: hidden; background-color: #02050a; font-family: 'PingFang SC', sans-serif; }
+        canvas { display: block; cursor: crosshair; }
+
+        #controls {
+            position: absolute; 
+            bottom: 60px; 
+            width: 100%; 
+            text-align: center;
+            color: rgb(240, 240, 238); 
+            z-index: 10; 
+            /* 允许点击文字 */
+            pointer-events: auto; 
+            cursor: pointer;
+            text-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+            transition: transform 0.3s ease;
+        }
+        /* 鼠标悬停时的微光效果 */
+        #controls:hover {
+            transform: scale(1.05);
+            text-shadow: 0 0 25px rgba(255, 215, 0, 0.6);
+        }
+        #controls h2 { 
+            font-family: 'Caveat', 'Segoe Script', cursive; 
+            font-size: 56px; 
+            margin: 0; 
+            letter-spacing: 2px; 
+        }
+
+        #overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(2, 5, 10, 0.7); 
+            z-index: 100;
+            display: flex; justify-content: center; align-items: center;
+            color: #fff; cursor: pointer; transition: opacity 0.8s;
+            backdrop-filter: blur(5px);
+            font-size: 18px; letter-spacing: 2px;
+            font-weight: 200;
+        }
+        #overlay.hidden { opacity: 0; pointer-events: none; }
+        #hint { position: absolute; bottom: 40px; width: 100%; text-align: center; color: rgba(255,255,255,0.5); font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">点击开启圣诞惊喜</div>
+    <div id="hint">提示：点击文字有特别惊喜</div>
+    <div id="controls" onclick="goToGift()">
+        <h2>Merry Christmas</h2>
+    </div>
+
+    <audio id="bgMusic" loop>
+        <source src="https://actions.google.com/sounds/v1/foley/wind_chimes.ogg" type="audio/ogg">
+    </audio>
+
+    <canvas id="treeCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('treeCanvas');
+        const ctx = canvas.getContext('2d');
+        const music = document.getElementById('bgMusic');
+        const overlay = document.getElementById('overlay');
+
+        let width, height, particles = [], snowflakes = [], ribbons = [], fireworks = [];
+        let isDragging = false, lastMouseX, lastMouseY;
+        
+        let rotationX = 0.8;    
+        let rotationY = 0; 
+        let scale = 3;        
+        let time = 0;
+        let isStarted = false;  
+
+        const targetRotationX = -0.3; 
+        const targetScale = 1.8; 
+        const transitionSpeed = 0.008; 
+
+        // 跳转函数
+        function goToGift() {
+            if (isStarted) {
+                window.location.href = './gift.html';
+            }
+        }
+
+        // 点击交互：触发开始并产生烟花
+        window.addEventListener('mousedown', (e) => {
+            if (!isStarted) {
+                isStarted = true;
+                music.play();
+                overlay.classList.add('hidden');
+            }
+            // 如果点击的不是文字区域，则产生烟花
+            if (e.target.tagName !== 'H2' && e.target.id !== 'controls') {
+                createFirework(e.clientX, e.clientY);
+            }
+            isDragging = true; 
+            lastMouseX = e.clientX; 
+            lastMouseY = e.clientY;
+        });
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        // 创建烟花
+        function createFirework(x, y) {
+            const count = 30;
+            const colors = ['#ff5252', '#ffeb3b', '#2196f3', '#4caf50', '#ff4081', '#e040fb'];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 4 + 2;
+                fireworks.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1.0,
+                    decay: Math.random() * 0.02 + 0.015,
+                    color: color
+                });
+            }
+        }
+
+        function createSnow() {
+            snowflakes = [];
+            for (let i = 0; i < 150; i++) {
+                snowflakes.push({ 
+                    x: (Math.random()-0.5)*800, 
+                    y: (Math.random()-0.5)*800, 
+                    z: (Math.random()-0.5)*800, 
+                    s: Math.random()*2+1,
+                    isRealFlake: Math.random() > 0.8 // 20% 的概率是真雪花形状
+                });
+            }
+        }
+
+        // 绘制真实的雪花形状
+        function drawFlake(x, y, size) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.beginPath();
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 6; i++) {
+                ctx.moveTo(0, 0);
+                ctx.lineTo(0, -size);
+                ctx.moveTo(0, -size * 0.5);
+                ctx.lineTo(-size * 0.3, -size * 0.8);
+                ctx.moveTo(0, -size * 0.5);
+                ctx.lineTo(size * 0.3, -size * 0.8);
+                ctx.rotate(Math.PI / 3);
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function createParticles() {
+            particles = [];
+            for (let i = 0; i < 2200; i++) {
+                const h = Math.random();
+                const angle = Math.random() * Math.PI * 2;
+                const jitter = 1 + (Math.random() * 0.25 - 0.12);
+                const r = Math.sqrt(Math.random()) * (1 - h) * 180 * jitter;
+                
+                let color, type = 'dot';
+                const rand = Math.random();
+                
+                if (h > 0.9) { color = [255, 215, 0]; } 
+                else if (rand > 0.8) { color = [255, 220, 50]; } 
+                else if (rand > 0.65) { color = [255, 50, 80]; type = 'heart'; } 
+                else { color = [45, 185, 110]; }
+
+                particles.push({
+                    baseX: Math.cos(angle) * r,
+                    baseY: (1 - h) * 320 - 150,
+                    baseZ: Math.sin(angle) * r,
+                    offset: Math.random() * Math.PI * 2,
+                    size: type === 'heart' ? Math.random() * 3 + 2 : Math.random() * 1.1 + 0.5,
+                    color: color,
+                    type: type
+                });
+            }
+        }
+
+        function createRibbons() {
+            ribbons = [];
+            for (let i = 0; i < 6; i++) {
+                const points = [];
+                const startH = Math.random() * 0.5;
+                const endH = startH + 0.4 + Math.random() * 0.4;
+                const phase = Math.random() * Math.PI * 2;
+                const rOffset = 180 + (Math.random() * 30 - 15);
+                const rotSpeed = 0.3 + Math.random() * 0.4;
+                
+                const dashPattern = [];
+                let currentPos = 0;
+                while(currentPos < 60) {
+                    let dashLen = Math.floor(Math.random() * 15) + 5;
+                    let gapLen = Math.floor(Math.random() * 10) + 5;
+                    dashPattern.push({start: currentPos, end: currentPos + dashLen});
+                    currentPos += (dashLen + gapLen);
+                }
+
+                for (let j = 0; j <= 60; j++) {
+                    points.push({ 
+                        h: startH + (Math.min(endH, 1.0) - startH) * (j / 60), 
+                        phase: phase, 
+                        rOffset: rOffset, 
+                        rotSpeed: rotSpeed,
+                        index: j 
+                    });
+                }
+                ribbons.push({ points, dashPattern });
+            }
+        }
+
+        function project(x, y, z) {
+            let x1 = x * Math.cos(rotationY) - z * Math.sin(rotationY);
+            let z1 = x * Math.sin(rotationY) + z * Math.cos(rotationY);
+            let y2 = y * Math.cos(rotationX) - z1 * Math.sin(rotationX);
+            let z2 = y * Math.sin(rotationX) + z1 * Math.cos(rotationX);
+            let p = 600 / Math.max(1, (600 + z2));
+            return { x: x1 * p * scale + width / 2, y: y2 * p * scale + height / 2, s: p * scale, zIndex: z2 };
+        }
+
+        function projectStatic(x, y, z) {
+            let y2 = y * Math.cos(rotationX) - z * Math.sin(rotationX);
+            let z2 = y * Math.sin(rotationX) + z * Math.cos(rotationX);
+            let p = 600 / Math.max(1, (600 + z2));
+            return { x: x * p * scale + width / 2, y: y2 * p * scale + height / 2, s: p * scale };
+        }
+
+        function drawHeart(x, y, size) {
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.bezierCurveTo(x - size/2, y - size/2, x - size, y + size/3, x, y + size);
+            ctx.bezierCurveTo(x + size, y + size/3, x + size/2, y - size/2, x, y);
+            ctx.fill();
+        }
+
+        function drawStar(time) {
+            const starPoints = [];
+            const innerRadius = 9;
+            const outerRadius = 24;
+            const starY = -180; 
+
+            for (let i = 0; i < 10; i++) {
+                const r = (i % 2 === 0) ? outerRadius : innerRadius;
+                const angle = (i * Math.PI * 2) / 10 - Math.PI / 2;
+                starPoints.push({
+                    x: Math.cos(angle) * r,
+                    y: starY + Math.sin(angle) * r + Math.sin(time * 3) * 4
+                });
+            }
+
+            ctx.beginPath();
+            ctx.shadowBlur = 25;
+            ctx.shadowColor = "rgba(255, 215, 0, 1)";
+            ctx.fillStyle = "rgba(255, 240, 150, 0.95)";
+            
+            starPoints.forEach((pt, i) => {
+                const p = projectStatic(pt.x, pt.y, 0);
+                if (i === 0) ctx.moveTo(p.x, p.y);
+                else ctx.lineTo(p.x, p.y);
+            });
+            
+            ctx.closePath();
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        function animate() {
+            time += 0.01;
+            ctx.fillStyle = '#020510';
+            ctx.fillRect(0, 0, width, height);
+
+            if (isStarted && !isDragging) {
+                if (Math.abs(rotationX - targetRotationX) > 0.001) {
+                    rotationX += (targetRotationX - rotationX) * transitionSpeed;
+                }
+                if (Math.abs(scale - targetScale) > 0.001) {
+                    scale += (targetScale - scale) * transitionSpeed;
+                }
+                rotationY += 0.025; 
+            } else if (!isStarted) {
+                rotationY += 0.001;
+            }
+
+            // 1. 雪花逻辑
+            snowflakes.forEach(s => {
+                s.y += 0.7; if(s.y > 400) s.y = -400;
+                const p = project(s.x, s.y, s.z);
+                if (s.isRealFlake) {
+                    drawFlake(p.x, p.y, 4 * p.s);
+                } else {
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, Math.max(0, s.s * p.s), 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+
+            // 2. 绘制树顶星星
+            drawStar(time);
+
+            // 3. 丝带
+            ribbons.forEach((ribbonObj, index) => {
+                const { points, dashPattern } = ribbonObj;
+                ctx.beginPath();
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = "rgba(255, 215, 0, 0.3)";
+                const alpha = 0.4 + Math.sin(time + index) * 0.2; 
+                ctx.strokeStyle = `rgba(255, 220, 120, ${alpha})`;
+                ctx.lineWidth = 1.8 * scale;
+
+                points.forEach((pt, j) => {
+                    const angle = pt.h * Math.PI * 3.5 + pt.phase + time * pt.rotSpeed;
+                    const r = (1 - pt.h) * pt.rOffset;
+                    const p = project(Math.cos(angle) * r, (1 - pt.h) * 320 - 150, Math.sin(angle) * r);
+                    const animatedIndex = (j + Math.floor(time * 20)) % 60; 
+                    const isLit = dashPattern.some(d => animatedIndex >= d.start && animatedIndex <= d.end);
+
+                    if (j === 0 || !isLit) {
+                        ctx.moveTo(p.x, p.y);
+                    } else {
+                        ctx.lineTo(p.x, p.y);
+                    }
+                });
+                ctx.stroke();
+            });
+
+            // 4. 树粒子
+            const rendered = particles.map(p => {
+                const wave = Math.sin(time * 2 + p.offset) * 2;
+                const pos = project(p.baseX + wave, p.baseY, p.baseZ + wave);
+                return { ...pos, color: p.color, size: p.size, type: p.type };
+            });
+            rendered.sort((a, b) => b.zIndex - a.zIndex);
+            rendered.forEach(p => {
+                const opacity = Math.max(0.1, Math.min(1, (800 - p.zIndex) / 1000));
+                ctx.fillStyle = `rgba(${p.color[0]}, ${p.color[1]}, ${p.color[2]}, ${opacity})`;
+                if (p.type === 'heart') {
+                    drawHeart(p.x, p.y, p.size * p.s);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, Math.max(0, p.size * p.s), 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+
+            // 5. 烟花粒子逻辑
+            fireworks.forEach((f, index) => {
+                f.x += f.vx;
+                f.y += f.vy;
+                f.vy += 0.05; // 重力
+                f.life -= f.decay;
+                if (f.life <= 0) {
+                    fireworks.splice(index, 1);
+                } else {
+                    ctx.fillStyle = f.color;
+                    ctx.globalAlpha = f.life;
+                    ctx.beginPath();
+                    ctx.arc(f.x, f.y, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('load', () => {
+            resize(); createParticles(); createSnow(); createRibbons(); animate();
+        });
+        
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                rotationY += (e.clientX - lastMouseX) * 0.01;
+                rotationX += (e.clientY - lastMouseY) * 0.01;
+                lastMouseX = e.clientX; lastMouseY = e.clientY;
+            }
+        });
+        window.addEventListener('mouseup', () => isDragging = false);
+        window.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            scale = Math.min(Math.max(0.2, scale * (e.deltaY > 0 ? 0.9 : 1.1)), 4.0);
+        }, { passive: false });
+        window.addEventListener('resize', resize);
+    </script>
+</body>
+</html>
