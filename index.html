@@ -56,7 +56,7 @@
 </head>
 <body>
 
-    <div id="overlay">点击开启圣诞惊喜</div>
+    <div id="overlay">点击文字开启圣诞惊喜</div>
     <div id="hint">提示：点击文字有特别惊喜</div>
     <div id="controls" onclick="goToGift()">
         <h2>Merry Christmas</h2>
@@ -75,6 +75,7 @@
         const music = document.getElementById('bgMusic');
         const overlay = document.getElementById('overlay');
 
+        let treeHeightFactor;
         let width, height, particles = [], snowflakes = [], ribbons = [], fireworks = [];
         let isDragging = false, lastMouseX, lastMouseY;
         
@@ -87,12 +88,14 @@
         let initialPinchDistance = null;
 
         const targetRotationX = -0.3; 
-        const targetScale = 1.8; 
+        const targetScale = 1.2; 
         const transitionSpeed = 0.008; 
 
         // 跳转函数
         function goToGift() {
             if (isStarted) {
+                sessionStorage.setItem('musicTime', music.currentTime); // 关键：保存当前秒数
+                sessionStorage.setItem('isMusicStarted', 'true');
                 window.location.href = './gift.html';
             }
         }
@@ -100,10 +103,7 @@
         // 点击交互：触发开始并产生烟花
         window.addEventListener('pointerdown', (e) => {
             if (!isStarted) {
-                isStarted = true;
-                music.muted = false;   // 关键：取消静音
-                music.play();
-                overlay.classList.add('hidden');
+                startExperience(false);
             }
             // 如果点击的不是文字区域，则产生烟花
             if (e.target.tagName !== 'H2' && e.target.id !== 'controls') {
@@ -117,6 +117,25 @@
         function resize() {
             width = canvas.width = window.innerWidth;
             height = canvas.height = window.innerHeight;
+            // 动态计算树的高度基准：始终保持为窗口高度的 60% 到 70%
+            // 这样无论窗口怎么缩，树的比例都是相对窗口对齐的
+            treeHeightFactor = Math.min(height * 0.7, 500);
+
+            // 针对不同长宽比，调整 scale 缩放系数
+            if (width < height) {
+                // 竖屏（手机或窄窗口）
+                scale = (height / 1000) * 2.2; 
+            } else {
+                // 横屏（电脑全屏）
+                // 增加一个动态系数，让 scale 随高度缩短而减小
+                scale = (height / 800) * 1.8; 
+            }
+
+            // 关键：窗口改变时必须重新生成粒子和丝带的位置，否则它们会留在旧的坐标系里
+            createParticles();
+            createRibbons();
+            createSnow();
+            drawStar(time);
         }
 
         // 创建烟花
@@ -172,13 +191,15 @@
             ctx.restore();
         }
 
+        //生成粒子
         function createParticles() {
             particles = [];
             for (let i = 0; i < 2200; i++) {
                 const h = Math.random();
                 const angle = Math.random() * Math.PI * 2;
                 const jitter = 1 + (Math.random() * 0.25 - 0.12);
-                const r = Math.sqrt(Math.random()) * (1 - h) * 180 * jitter;
+                // const r = Math.sqrt(Math.random()) * (1 - h) * 180 * jitter;
+                const r = Math.sqrt(Math.random()) * (1 - h) * (treeHeightFactor * 0.55) * jitter;
                 
                 let color, type = 'dot';
                 const rand = Math.random();
@@ -190,7 +211,7 @@
 
                 particles.push({
                     baseX: Math.cos(angle) * r,
-                    baseY: (1 - h) * 320 - 150,
+                    baseY: (1 - h) * treeHeightFactor - (treeHeightFactor / 2),
                     baseZ: Math.sin(angle) * r,
                     offset: Math.random() * Math.PI * 2,
                     size: type === 'heart' ? Math.random() * 3 + 2 : Math.random() * 1.1 + 0.5,
@@ -258,9 +279,10 @@
 
         function drawStar(time) {
             const starPoints = [];
-            const innerRadius = 9;
-            const outerRadius = 24;
-            const starY = -180; 
+            const innerRadius = 9 * (height / 1000 + 0.5); // 星星大小也随高度微调
+            const outerRadius = 24 * (height / 1000 + 0.5);
+            // 星星的位置设定在树的最顶端：即树高度一半的负值再往上一点
+            const starY = -(treeHeightFactor / 2) - 30;
 
             for (let i = 0; i < 10; i++) {
                 const r = (i % 2 === 0) ? outerRadius : innerRadius;
@@ -285,6 +307,24 @@
             ctx.closePath();
             ctx.fill();
             ctx.shadowBlur = 0;
+        }
+
+        // 封装启动逻辑
+        function startExperience(isAuto = false) {
+            isStarted = true;
+            music.muted = false;
+            // 只有在非静音或用户已交互的情况下 play() 才会成功
+            music.play().catch(err => console.log("播放被拦截:", err));
+            overlay.classList.add('hidden');
+    
+            // 存入状态，下次加载此页面可识别
+            sessionStorage.setItem('isMusicStarted', 'true');
+
+            // 如果是手动点击启动的，触发一个烟花效果
+            if (!isAuto) {
+                // 这里的坐标可以根据需要设置，比如中心点
+                createFirework(width / 2, height / 2);
+                }
         }
 
         function animate() {
@@ -333,8 +373,9 @@
 
                 points.forEach((pt, j) => {
                     const angle = pt.h * Math.PI * 3.5 + pt.phase + time * pt.rotSpeed;
-                    const r = (1 - pt.h) * pt.rOffset;
-                    const p = project(Math.cos(angle) * r, (1 - pt.h) * 320 - 150, Math.sin(angle) * r);
+                    const r = (1 - pt.h) * (treeHeightFactor * 0.55); // 同步半径比例
+                    // 动态计算 Y 轴位置
+                    const p = project(Math.cos(angle) * r, (1 - pt.h) * treeHeightFactor - (treeHeightFactor / 2), Math.sin(angle) * r);
                     const animatedIndex = (j + Math.floor(time * 20)) % 60; 
                     const isLit = dashPattern.some(d => animatedIndex >= d.start && animatedIndex <= d.end);
 
@@ -388,14 +429,39 @@
         }
 
         window.addEventListener('load', () => {
-            resize(); createParticles(); createSnow(); createRibbons(); animate();
-            music.muted = true;
-            music.play();
+            resize(); 
+            createParticles(); 
+            createSnow(); 
+            createRibbons(); 
+            animate();
 
-            // 等一帧后解除静音
-            setTimeout(() => {
-                music.muted = false;
-            }, 300);
+            // 检查是否是从 gift.html 返回（或者之前已经点过开启）
+            const isBackFromGift = document.referrer.includes('gift.html');
+            const hasStartedBefore = sessionStorage.getItem('isMusicStarted') === 'true';
+            const savedTime = sessionStorage.getItem('musicTime');
+
+            if (hasStartedBefore && isBackFromGift) {
+                startExperience(true); // 传入 true 表示静默启动
+                if (savedTime) {
+                    music.currentTime = parseFloat(savedTime);
+                }
+            } else {
+                // 首次进入，静音预备播放（处理浏览器自动播放限制）
+                // 如果是直接刷新（referrer 不包含 gift.html），则重置所有状态
+                sessionStorage.removeItem('isMusicStarted');
+                sessionStorage.removeItem('musicTime');
+                overlay.classList.remove('hidden');
+                music.muted = true;
+                music.play().catch(() => {});
+                setTimeout(() => { music.muted = false; }, 300);
+            }
+        });
+
+        // 额外保险：当页面隐藏或卸载时也保存一次
+        window.addEventListener('beforeunload', () => {
+            if (music && !music.muted) {
+                sessionStorage.setItem('musicTime', music.currentTime);
+            }
         });
         
         window.addEventListener('pointermove', (e) => {

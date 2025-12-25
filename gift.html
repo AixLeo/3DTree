@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Christmas Gift - Special Edition</title>
+    <title>Christmas Gift</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap');
         body { margin: 0; overflow: hidden; background-color: #02050a; font-family: 'PingFang SC', sans-serif; }
@@ -26,11 +26,17 @@
         <p>一份特别的圣诞礼物</p>
     </div>
     <div id="timer">10秒后自动返回圣诞树...</div>
+
+    <audio id="bgMusic" loop>
+    <source src="./jingle-bells.mp3" type="audio/mpeg">
+    </audio>
+
     <canvas id="giftCanvas"></canvas>
 
     <script>
         const canvas = document.getElementById('giftCanvas');
         const ctx = canvas.getContext('2d');
+        const music = document.getElementById('bgMusic');
         let width, height, particles = [], time = 0, rotationY = 0;
         let introProgress = 0; // 入场动画进度
 
@@ -181,8 +187,27 @@
             resize(); 
             createGiftBox(); 
             animate();
+
+            // 音乐续播逻辑
+            const savedTime = sessionStorage.getItem('musicTime');
+            if (savedTime) {
+                music.currentTime = parseFloat(savedTime);
+            }
+
+            // 注意：由于浏览器安全策略，页面跳转后可能需要用户点击才能继续发声
+            // 但因为是从同源页面跳转且用户有过交互，大部分移动端/桌面浏览器会自动允许播放
+            music.play().catch(e => {
+                console.log("自动播放被拦截，等待点击触发", e);
+                // 如果被拦截，可以监听整个页面的第一次点击来恢复
+                window.addEventListener('pointerdown', () => music.play(), { once: true });
+                window.addEventListener('touchstart', () => music.play(), { once: true });
+            });
+
+            // 10秒后返回时，同样保存进度
             setTimeout(() => {
-                window.location.href = './index.html'; 
+                sessionStorage.setItem('musicTime', music.currentTime);
+                sessionStorage.setItem('isMusicStarted', 'true');
+                window.location.href = './index.html'; // 请确保文件名与 index 实际文件名一致
             }, 10000);
         });
         window.addEventListener('resize', resize);
