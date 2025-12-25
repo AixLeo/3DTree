@@ -7,7 +7,13 @@
         @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap');
 
         body { margin: 0; overflow: hidden; background-color: #02050a; font-family: 'PingFang SC', sans-serif; }
-        canvas { display: block; cursor: crosshair; }
+        canvas { 
+            display: block; 
+            cursor: crosshair;
+            /* 核心：阻止手机浏览器默认的缩放/滚动行为，交由 JS 处理 */
+            touch-action: none; 
+            -webkit-user-select: none; /* 防止长按弹出菜单 */ 
+        }
 
         #controls {
             position: absolute; 
@@ -74,9 +80,11 @@
         
         let rotationX = 0.8;    
         let rotationY = 0; 
-        let scale = 3;        
+        let scale = 5;        
         let time = 0;
         let isStarted = false;  
+        // 新增变量用于记录手机多指缩放
+        let initialPinchDistance = null;
 
         const targetRotationX = -0.3; 
         const targetScale = 1.8; 
@@ -90,7 +98,7 @@
         }
 
         // 点击交互：触发开始并产生烟花
-        window.addEventListener('mousedown', (e) => {
+        window.addEventListener('pointerdown', (e) => {
             if (!isStarted) {
                 isStarted = true;
                 music.muted = false;   // 关键：取消静音
@@ -390,15 +398,39 @@
             }, 300);
         });
         
-        window.addEventListener('mousemove', (e) => {
-            if (isDragging) {
+        window.addEventListener('pointermove', (e) => {
+            // 处理单指拖拽旋转
+            if (isDragging && e.pointerType !== 'touch' || (isDragging && !initialPinchDistance)) {
                 rotationY += (e.clientX - lastMouseX) * 0.01;
                 rotationX += (e.clientY - lastMouseY) * 0.01;
-                lastMouseX = e.clientX; lastMouseY = e.clientY;
+                lastMouseX = e.clientX; 
+                lastMouseY = e.clientY;
             }
         });
-        window.addEventListener('mouseup', () => isDragging = false);
-        window.addEventListener('wheel', (e) => {
+        // 处理手机端的双指缩放
+        window.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2) {
+                isDragging = false; // 双指缩放时停止旋转
+                const dist = Math.hypot(
+                    e.touches[0].pageX - e.touches[1].pageX,
+                    e.touches[0].pageY - e.touches[1].pageY
+                );
+        
+                if (initialPinchDistance === null) {
+                    initialPinchDistance = dist;
+                } else {
+                    const delta = dist / initialPinchDistance;
+                    scale = Math.min(Math.max(0.2, scale * delta), 4.0);
+                    initialPinchDistance = dist;
+                }
+            }
+        }, { passive: false });
+
+window.addEventListener('touchend', () => {
+    initialPinchDistance = null;
+});
+        window.addEventListener('pointerup', () => isDragging = false);
+        window.addEventListener('pointercancel', (e) => {
             e.preventDefault();
             scale = Math.min(Math.max(0.2, scale * (e.deltaY > 0 ? 0.9 : 1.1)), 4.0);
         }, { passive: false });
