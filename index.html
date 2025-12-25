@@ -309,22 +309,45 @@
             ctx.shadowBlur = 0;
         }
 
-        // 封装启动逻辑
+        // // 封装启动逻辑
+        // function startExperience(isAuto = false) {
+        //     isStarted = true;
+        //     music.muted = false;
+        //     // 只有在非静音或用户已交互的情况下 play() 才会成功
+        //     music.play().catch(err => console.log("播放被拦截:", err));
+        //     overlay.classList.add('hidden');
+    
+        //     // 存入状态，下次加载此页面可识别
+        //     sessionStorage.setItem('isMusicStarted', 'true');
+
+        //     // 如果是手动点击启动的，触发一个烟花效果
+        //     if (!isAuto) {
+        //         // 这里的坐标可以根据需要设置，比如中心点
+        //         createFirework(width / 2, height / 2);
+        //         }
+        // }
+
         function startExperience(isAuto = false) {
             isStarted = true;
-            music.muted = false;
-            // 只有在非静音或用户已交互的情况下 play() 才会成功
-            music.play().catch(err => console.log("播放被拦截:", err));
             overlay.classList.add('hidden');
-    
-            // 存入状态，下次加载此页面可识别
             sessionStorage.setItem('isMusicStarted', 'true');
 
-            // 如果是手动点击启动的，触发一个烟花效果
-            if (!isAuto) {
-                // 这里的坐标可以根据需要设置，比如中心点
-                createFirework(width / 2, height / 2);
+            if (isAuto) {
+                // 自动返回模式：由于已经有过交互，通常可以直接播放
+                music.muted = false;
+                music.play().catch(err => console.log("自动续播受限:", err));
+            } else {
+                // 用户手动点击模式：必须在这里执行 play()
+                music.muted = false;
+            const playPromise = music.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        createFirework(width / 2, height / 2);
+                    }).catch(err => {
+                        console.log("播放失败，尝试引导用户再次点击", err);
+                    });
                 }
+            }
         }
 
         function animate() {
